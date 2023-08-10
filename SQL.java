@@ -1,12 +1,16 @@
-package net.oasisgames.SQLoad.data;
+package net.oasisgames.datasql.database;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.SQLSyntaxErrorException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * @author Nick Doxa
@@ -28,13 +32,21 @@ import java.util.Map;
  * <br><br>
  * <strong>Website:</strong> <a href="https://oasisgames.net">https://oasisgames.net</a>
  */
-public abstract class SQLManager {
+public abstract class SQL {
 	
-	private final String tableName;
-	private final Map<Integer, Map<String, String>> creationKeyValues;
-	private final Map<Integer, String> keyValues;
-	private final String primaryKey;
-	private final boolean printStatements;
+	protected String tableName;
+	private Map<Integer, Map<String, String>> creationKeyValues;
+	private Map<Integer, String> valueNames;
+	private String primaryKey;
+	private static boolean printStatements;
+	
+	/**
+	 * @param print - (boolean) Whether or not to print Debug/Console statements.
+	 * True for print, False for hide.
+	 */
+	public static void setPrintStatements(boolean print) {
+		printStatements = true;
+	}
 	
     /**
      * @apiNote
@@ -48,31 +60,49 @@ public abstract class SQLManager {
 	
 	/**
 	* @apiNote You must add the login credentials here as a String array
-	* @param name - (String) The table name within database
-  * @param primaryKeyValue - (String) The primary key for the table A.K.A. what piece of data you will use to access the rest
-  * @param showStatements - (Boolean) determining whether to write information to console
-  * @param credentials - (String Array) The array of necessary information to log into a SQL database.
-  * The Strings must be in order and must not exceed or be less than 5 total strings. They go in the order of:
-  * <i>Host, Port, Database, Username, Password. <strong>See the API Notes for the connect() method for more detail.</i>
-	 */
-	public SQLManager(String tableName, String primaryKeyValue, boolean showStatements, String[] credentials) {
+	* @param tableName - (String) The table name within database
+	* @param primaryKeyValue - (String) The primary key NAME for the table A.K.A. what piece of data you will use to access the rest
+	* @param credentials - (String Array) The array of necessary information to log into a SQL database.
+	* The Strings must be in order and must not exceed or be less than 5 total strings. They go in the order of:
+	* <i>Host, Port, Database, Username, Password. <strong>See the API Notes for the connect() method for more detail.</i></strong>
+    * @param createTable - (Boolean) Whether or not to create a table or just connect.
+	* True to create a table, false to just connect.
+	*/
+	public SQL(String tableName, String primaryKeyValue, String[] credentials, 
+			boolean createTable) {
 		this.tableName = tableName;
 		creationKeyValues = createKeyValueMap();
 		primaryKey = primaryKeyValue;
-		printStatements = showStatements;
-		keyValues = new HashMap<Integer, String>();
-		for (int i=0;i<creationKeyValues.size();i++) {
+		//Numbered HashMap of value names (not types)
+		valueNames = new HashMap<Integer, String>();
+		for (int i=1;i<creationKeyValues.size()+1;i++) {
 			for (String s : creationKeyValues.get(i).keySet()) {
-				keyValues.put(i, s);
+				valueNames.put(i, s);
 			}
 		}
 		try {
 			connect(credentials[0], credentials[1], credentials[2], credentials[3], credentials[4]);
 		} catch (SQLException e) {
-			if (printStatements) printToConsole("The database did not connect!");
+			printToConsole("The database did not connect!");
+			if (printStatements) e.printStackTrace();
 		}
-		if (isConnected()) {
-			this.createTable();
+		if (isConnected() && createTable) {
+			this.createTable(primaryKey);
+		}
+	}
+	
+	/**
+	* @apiNote You must add the login credentials here as a String array
+	* @param credentials - (String Array) The array of necessary information to log into a SQL database.
+	* The Strings must be in order and must not exceed or be less than 5 total strings. They go in the order of:
+	* <i>Host, Port, Database, Username, Password. <strong>See the API Notes for the connect() method for more detail.</i></strong>
+	*/
+	public SQL(String[] credentials) {
+		try {
+			connect(credentials[0], credentials[1], credentials[2], credentials[3], credentials[4]);
+		} catch (SQLException e) {
+			printToConsole("The database did not connect!");
+			if (printStatements) e.printStackTrace();
 		}
 	}
     
@@ -81,7 +111,6 @@ public abstract class SQLManager {
     /**
      * @apiNote Method used to connect to the SQL database. Sets the private static Connection paramater of the class to the current
      * connection. Connections are singletons, only one may exist.
-     * @throws SQLException
      * @param host - The address of the database host <i>(DO NOT INCLUDE PORT)</i>
      * @param port - The port of the database host
      * @param database - The name of the database you are using.
@@ -91,11 +120,11 @@ public abstract class SQLManager {
      */
     public void connect(String host, String port, String database, String username, String password) throws SQLException {
     	if (password == null) password = "";
-    	if (printStatements) printToConsole("Connecting to database!");
+    	printToConsole("Connecting to database!");
 	    connection = DriverManager.getConnection("jdbc:mysql://" +
 	    	     host + ":" + port + "/" + database + "?useSSL=false",
 	    	     username, password);
-	    if (printStatements) printToConsole("Connected successfully to MySQL Database!");
+	    printToConsole("Connected successfully to MySQL Database!");
     }
     
     /**
@@ -105,8 +134,7 @@ public abstract class SQLManager {
     	if (isConnected()) {
     		try {
     			connection.close();
-    			if (printStatements) printToConsole("Connected successfully to MySQL Database!");
-    			if (printStatements) printToConsole("Disconnected successfully from MySQL Database!");
+    			printToConsole("Disconnected successfully from MySQL Database!");
     		} catch(SQLException e) {
     			e.printStackTrace();
     		}
@@ -132,8 +160,8 @@ public abstract class SQLManager {
      * @return Boolean - Returns true if printStatements are true and no errors occurred. returns false if printStatements is false or
      * an error occured.
      */
-    private boolean printToConsole(String msg) {
-    	if (printStatements) System.out.println("[MySQL API] " + msg);
+    public static boolean printToConsole(String msg) {
+    	if (printStatements) System.out.println("[SQL API] " + msg);
     	return printStatements && !System.out.checkError();
     }
     
@@ -153,16 +181,18 @@ public abstract class SQLManager {
      */
     private Map<Integer, Map<String, String>> createKeyValueMap() {
     	Map<Integer, Map<String, String>> numericKeys = new HashMap<Integer, Map<String, String>>();
-    	Map<String, String> keys = new HashMap<String, String>();
+    	Map<String, String> keys;
     	int count = 0;
     	for (String s : this.createKeyValueArray()) {
+    		keys  = new HashMap<String, String>();
     		String[] keyArray = s.split(" ", 2);
     		keys.put(keyArray[0], keyArray[1]);
+    		printToConsole("Map: " + (count+1) + ", Key: " + keyArray[0] + ", Value: " + keyArray[1]);
     		numericKeys.put((count+1), keys);
-    		keys.clear();
+    		printToConsole("Map: " + (count+1) + ", Size: " + numericKeys.get(count+1).size());
     		count++;
     	}
-    	if (printStatements) printToConsole("Key Value Map created with a total of: " + count + " keys.");
+    	printToConsole("Key Value Map created with a total of: " + count + " keys.");
     	return numericKeys;
     }
     
@@ -170,10 +200,19 @@ public abstract class SQLManager {
      * @apiNote Creates a table in the database with the name predefined in the constructor. Only applies if a table with that 
      * name doesnt exist already.
      */
-    private void createTable() {
+    public void createTable(String primaryKeyValue) {
+    	creationKeyValues = createKeyValueMap();
+		primaryKey = primaryKeyValue;
+		//Numbered HashMap of value names (not types)
+		valueNames = new HashMap<Integer, String>();
+		for (int i=1;i<creationKeyValues.size()+1;i++) {
+			for (String s : creationKeyValues.get(i).keySet()) {
+				valueNames.put(i, s);
+			}
+		}
     	PreparedStatement ps;
     	String statement = "CREATE TABLE IF NOT EXISTS " + tableName + " (";
-    	for (int i=0;i<creationKeyValues.size();i++) {
+    	for (int i=1;i<creationKeyValues.size()+1;i++) {
     		for (String s : creationKeyValues.get(i).keySet()) {
     			statement = statement + s + " " + creationKeyValues.get(i).get(s) + ",";
     		}
@@ -182,8 +221,23 @@ public abstract class SQLManager {
     	try {
     		ps = getConnection().prepareStatement(statement);
     		ps.executeUpdate();
-    	} catch (SQLException | NullPointerException e) {
-    		if (printStatements) printToConsole("Table: " + tableName + ". Table either already exists, or an error was thrown! (Most likely not an issue)");
+    	} catch (NullPointerException e) {
+    		printToConsole("Table name was null. "
+    				+ "Data operation failed.\nDISCONNECTING");
+    		if (this.isConnected()) disconnect();
+    	} catch (SQLSyntaxErrorException e) {
+    		printToConsole("SQL Syntax was wrong. This is the result of either "
+    				+ "not adding any data columns, or adding an invalid name. \nDISCONNECTING");
+    		e.printStackTrace();
+    		if (this.isConnected()) disconnect();
+    	} catch (SQLException e) {
+    		printToConsole("General SQL Exception. DISCONNECTING\n"
+    				+ "See stack trace:");
+    		e.printStackTrace();
+    		if (this.isConnected()) disconnect();
+    	} finally {
+    		printToConsole("Table creation method ran. If no errors appeared the table was"
+    				+ " created successfully");
     	}
     }
     
@@ -197,8 +251,8 @@ public abstract class SQLManager {
 			if (!keyExists(key)) {
 				String statement = "INSERT IGNORE INTO " + tableName + " (" + primaryKey;
 				int q = 1;
-				for (int i=1;i<keyValues.size();i++) {
-					statement = statement + keyValues.get(i) + ",";
+				for (int i=1;i<valueNames.size();i++) {
+					statement = statement + valueNames.get(i) + ",";
 					q++;
 				}
 				statement = statement.substring(0, statement.length()) + ") VALUES (";
@@ -233,8 +287,8 @@ public abstract class SQLManager {
 			if (!keyExists(key)) {
 				String statement = "INSERT IGNORE INTO " + tableName + " (" + primaryKey;
 				int q = 1;
-				for (int i=1;i<keyValues.size();i++) {
-					statement = statement + keyValues.get(i) + ",";
+				for (int i=1;i<valueNames.size();i++) {
+					statement = statement + valueNames.get(i) + ",";
 					q++;
 				}
 				statement = statement.substring(0, statement.length()) + ") VALUES (";
@@ -272,7 +326,7 @@ public abstract class SQLManager {
 			ps.setObject(2, primary);
 			ps.executeUpdate();
 		} catch (SQLException e) {
-			if (printStatements) printToConsole("Error executing value update method! @ SQLManager:setValue(String, Object, String)");
+			printToConsole("Error executing value update method! @ SQLManager:setValue(String, Object, String)");
 		}
     }
     
@@ -319,6 +373,51 @@ public abstract class SQLManager {
 		}
 	}
 	
+	/**
+	 * @apiNote This method is used to get all the current tables by name in the database
+	 * @return String Array - Returns an array of all the table names in the database
+	 */
+	public String[] getAllTables() throws SQLException {
+		String[] output = new String[0];
+		try {
+			PreparedStatement ps = getConnection().prepareStatement("SHOW TABLES");
+		    ResultSet tables = ps.executeQuery();
+		    List<String> results = new ArrayList<String>();
+		    int count = 0;
+		    while (tables.next()) {
+		    	results.add(tables.getString(1));
+		    	count++;
+		    }
+		    if (count < 1) {
+		    	net.oasisgames.datasql.database.Connection.printToConsole("No tables found!");
+		    	return new String[0];
+		    }
+		    return results.stream()
+		    .filter(str -> !str.isBlank() && !str.isEmpty())
+		    .toArray(String[]::new);
+		} catch (NullPointerException e) {
+			net.oasisgames.datasql.database.Connection.printToConsole("Error: No tables were found!"
+					+ "\nError:");
+			e.printStackTrace();
+		} finally {
+			net.oasisgames.datasql.database.Connection.printToConsole("Tables fetched from database!");
+		}
+		return output;
+	}
+	
+	/**
+	 * @apiNote This method is used to check if the table name given exists within the database.
+	 * @param table - (String) The name of the table to check
+	 * @return Boolean - Returns true if the table exists, false if not
+	 */
+	public boolean tableExists(final String table) throws SQLException {
+		return Arrays.asList(getAllTables())
+				.stream()
+				.map(str -> str.equals(table))
+				.findAny()
+				.get();
+	}
+	
 	
 	/**
 	 * @apiNote Empties the entire table of all data entries. <br><br><strong><i>Dummy Explanation:</i></strong> Think of it as an excel sheet: Deleting the entire sheet.
@@ -328,7 +427,7 @@ public abstract class SQLManager {
 			PreparedStatement ps = getConnection().prepareStatement("TRUNCATE " + tableName);
 			ps.executeUpdate();
 		} catch (SQLException e) {
-			if (printStatements) printToConsole("Error truncating table!");
+			printToConsole("Error truncating table!");
 		}
 	}
 	
@@ -337,13 +436,14 @@ public abstract class SQLManager {
 	 * not deleting the entire sheet.
 	 * @param key - (String) The data of the primary key
 	 */
-	public void removeKey(String key) {
+	public void removeAllValues(String key) {
 		try {
 			PreparedStatement ps = getConnection().prepareStatement("DELETE FROM " + tableName + " WHERE " + primaryKey + "=?");
 			ps.setString(1, key);
 			ps.executeUpdate();
 		} catch (SQLException e) {
-			if (printStatements) printToConsole("Error removing key set from table!");
+			printToConsole("Error removing key set from table!");
 		}
 	}
+	
 }
