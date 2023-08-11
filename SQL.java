@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
 import java.util.Arrays;
@@ -13,28 +14,49 @@ import java.util.List;
 import java.util.ArrayList;
 
 /**
+ * <html><body><div id="gradient">
+ * <h1>SQL API</h1>
+ * <h2><i>Written by Nick Doxa</i></h2>
+ * <h3><b>How To Use:</b></h3>
+ * <p>This abstract class is meant to be the parent class to an object used for setting up
+ * a MySQL Database connection. Once either of the constructors for this class are called 
+ * (assuming the database is working and the login credentials are provided correctly)
+ * a connection will be made and the database will be accessible through various methods.
+ * Once connected you can:</p>
+ * <ul>
+ * 	<li>Create a new table</li>
+ * 	<li>Access an existing table</li>
+ * 	<li>Delete an existing table</li>
+ * 	<li>Truncate an existing table</li>
+ * 	<li>Change data in the table</li>
+ * 	<li>Add new data to the table</li>
+ * 	<li>Remove data from the table</li>
+ * 	<li>Check if data exists</li>
+ * 	<li>Get data from the table if it exists</li>
+ * 	<li>Get column names from a table</li>
+ * 	<li>Get entire columns or rows worth of data</li>
+ * </ul>
+ * <p>This API was created by Nick Doxa and Oasis Network LLC (Oasis Games)
+ * <br><strong>Website:</strong> <a href="https://oasisgames.net">https://oasisgames.net</a>
+ * </div><style>
+ * #gradient {
+ * 	background-image: linear-gradient(to right, black , gray);
+ * }
+ * h1 {
+ * 	color: white;
+ * 	font-size: 18px;
+ * }
+ * h2 {
+ * 	color: white;
+ * 	font-size: 14px;
+ * }
+ * </style></body></html>
  * @author Nick Doxa
  * @apiNote MySQL API created by Nick Doxa for free use by developers every where!
- * <br><br>
- * This API does 2 major things, creates an SQL Table inside a Database, and allows you to modify it. To use this table you need at minimum
- * basic Java knowledge, and basic understanding of how SQL works. This is more of a shortcut than a cheatsheet so if you are new to Java
- * I would say it would be best if you learned the language better first and then come back to this. If you don't know SQL at all this might
- * not fully cover you but it will certainly help. I have attached API Notes and information to all methods and the class constructor.
- * This is really meant for people who just don't want to do the whole process of writing up this code over and over or copy and pasting old
- * SQL classes and converting them for use in a new project. There are methods for deleting data, adding data, and editing data but make
- * sure to read the API Notes if you aren't sure what something does, the name can be a bit vague and so can the parameter names which is
- * why I added detailed notes.
- * <br><br>
- * This is a very basic API meant for helping developers like me who don't feel like writing the basic SQL code to get started sending
- * and receiving information every time they start a new project. Everything has notes written in plain english not nerd talk,
- * so it should be understandable even for people trying to get out of a bad situation without a lot of education like me.
- * Check out my company if you want more information on me.
- * <br><br>
- * <strong>Website:</strong> <a href="https://oasisgames.net">https://oasisgames.net</a>
  */
 public abstract class SQL {
 	
-	protected String tableName;
+	public String tableName;
 	private Map<Integer, Map<String, String>> creationKeyValues;
 	private Map<Integer, String> valueNames;
 	private String primaryKey;
@@ -136,7 +158,7 @@ public abstract class SQL {
     			connection.close();
     			printToConsole("Disconnected successfully from MySQL Database!");
     		} catch(SQLException e) {
-    			e.printStackTrace();
+    			if (printStatements) e.printStackTrace();
     		}
     	}
     }
@@ -269,7 +291,7 @@ public abstract class SQL {
 				return;
 			}
 		} catch (SQLException | NullPointerException e) {
-			return;
+			if (printStatements) e.printStackTrace();
 		}
 	}
     
@@ -306,7 +328,7 @@ public abstract class SQL {
 				return;
 			}
 		} catch (SQLException | NullPointerException e) {
-			return;
+			if (printStatements) e.printStackTrace();
 		}
 	}
     
@@ -369,6 +391,50 @@ public abstract class SQL {
 			ResultSet rs = ps.executeQuery();
 			return rs;
 		} catch (SQLException | NullPointerException e) {
+			if (printStatements) e.printStackTrace();
+			return null;
+		}
+	}
+	
+	/**
+	 * @apiNote This method retrieves all of the values in a column based on the given key
+	 * @param key - (String) The name of the column
+	 * @return ResultSet - Returns the ResultSet of the executed prepared statement
+	 */
+	public ResultSet getAllValuesByKey(String key) {
+		try {
+			PreparedStatement ps = getConnection().prepareStatement("SELECT "
+					+ key + " FROM " + tableName);
+			ResultSet rs = ps.executeQuery();
+			return rs;
+		} catch (SQLException | NullPointerException e) {
+			if (printStatements) e.printStackTrace();
+			return null;
+		}
+	}
+	
+	/**
+	 * @apiNote Gets a result set of all column names within the table and converts to an array
+	 * @return String Array - The column names of the table
+	 */
+	public String[] getAllColumns() {
+		try {
+			PreparedStatement ps = getConnection().prepareStatement("SELECT * "
+					+ "FROM " + tableName);
+			ResultSet rs = ps.executeQuery();
+			ResultSetMetaData meta = rs.getMetaData();
+			int size = meta.getColumnCount();
+			if (size == 0) {
+				printToConsole("No columns found!");
+				return null;
+			}
+			String[] output = new String[size];
+			for (int i = 1; i <= size; i++) {
+				output[i-1] = meta.getColumnName(i);
+			}
+			return output;
+		} catch (SQLException | NullPointerException e) {
+			if (printStatements) e.printStackTrace();
 			return null;
 		}
 	}
@@ -398,7 +464,7 @@ public abstract class SQL {
 		} catch (NullPointerException e) {
 			net.oasisgames.datasql.database.Connection.printToConsole("Error: No tables were found!"
 					+ "\nError:");
-			e.printStackTrace();
+			if (printStatements) e.printStackTrace();
 		} finally {
 			net.oasisgames.datasql.database.Connection.printToConsole("Tables fetched from database!");
 		}
@@ -418,7 +484,6 @@ public abstract class SQL {
 				.get();
 	}
 	
-	
 	/**
 	 * @apiNote Empties the entire table of all data entries. <br><br><strong><i>Dummy Explanation:</i></strong> Think of it as an excel sheet: Deleting the entire sheet.
 	 */
@@ -427,7 +492,7 @@ public abstract class SQL {
 			PreparedStatement ps = getConnection().prepareStatement("TRUNCATE " + tableName);
 			ps.executeUpdate();
 		} catch (SQLException e) {
-			printToConsole("Error truncating table!");
+			if (printStatements) printToConsole("Error truncating table!");
 		}
 	}
 	
@@ -442,7 +507,7 @@ public abstract class SQL {
 			ps.setString(1, key);
 			ps.executeUpdate();
 		} catch (SQLException e) {
-			printToConsole("Error removing key set from table!");
+			if (printStatements) printToConsole("Error removing key set from table!");
 		}
 	}
 	
